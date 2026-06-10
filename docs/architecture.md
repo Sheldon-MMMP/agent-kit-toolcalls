@@ -49,6 +49,7 @@ sequenceDiagram
 - `src/runtime/register-tools.ts` must not import `src/tools/*`.
 - `src/runtime/execute-set.ts` must not import `src/tools/*`.
 - `src/runtime/tool-store.ts` must not import `src/tools/*`.
-- Tools are only loaded when users import their subpath.
+- `src/tools/index.ts` is generated from every `src/tools/*/index.ts`.
+- Public tool exports are re-exported from `@agent-kit/toolcalls`.
 - `registerTools()` only handles the tools passed by the user.
 - `execute_set()` only executes tools already stored by `registerTools()`.

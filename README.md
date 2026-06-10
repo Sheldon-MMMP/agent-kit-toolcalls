@@ -14,10 +14,10 @@ npm install @agent-kit/toolcalls
 
 ```ts
 import {
+  createMemoryListTool,
   execute_set,
   registerTools,
 } from '@agent-kit/toolcalls';
-import { createMemoryListTool } from '@agent-kit/toolcalls/tools/memory-list';
 
 const memoryListTool = createMemoryListTool({
   listMemories: () => memoryRepository.listMemories(),

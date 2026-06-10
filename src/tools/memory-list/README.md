@@ -22,7 +22,7 @@ No input.
 ## Usage
 
 ```ts
-import { createMemoryListTool } from '@agent-kit/toolcalls/tools/memory-list';
+import { createMemoryListTool } from '@agent-kit/toolcalls';
 
 const memoryListTool = createMemoryListTool({
   listMemories: () => memoryRepository.listMemories(),
