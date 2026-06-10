@@ -11,24 +11,15 @@ export type MemoryListOutput = {
   memories: Memory[];
 };
 
-export type MemoryListDeps = {
-  listMemories(): Promise<Memory[]>;
+export const memoryListTool: Tool<MemoryListInput, MemoryListOutput> = {
+  name: 'memory_list',
+  description: 'List saved memories that the agent can use as context.',
+  inputSchema: {
+    type: 'object',
+    properties: {},
+    additionalProperties: false,
+  },
+  async execute() {
+    return { memories: [] };
+  },
 };
-
-export function createMemoryListTool(
-  deps: MemoryListDeps,
-): Tool<MemoryListInput, MemoryListOutput> {
-  return {
-    name: 'memory_list',
-    description: 'List saved memories that the agent can use as context.',
-    inputSchema: {
-      type: 'object',
-      properties: {},
-      additionalProperties: false,
-    },
-    async execute() {
-      const memories = await deps.listMemories();
-      return { memories };
-    },
-  };
-}

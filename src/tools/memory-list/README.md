@@ -22,9 +22,7 @@ No input.
 ## Usage
 
 ```ts
-import { createMemoryListTool } from '@agent-kit/toolcalls';
+import { memoryListTool, registerTools } from '@agent-kit/toolcalls';
 
-const memoryListTool = createMemoryListTool({
-  listMemories: () => memoryRepository.listMemories(),
-});
+const tools = registerTools([memoryListTool], 'openai');
 ```

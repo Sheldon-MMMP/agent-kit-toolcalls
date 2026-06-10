@@ -10,7 +10,8 @@
     "dist",
     "docs",
     "src/tools/*/README.md",
-    "README.md"
+    "README.md",
+    "README.EN.md"
   ],
   "exports": {
     ".": {
