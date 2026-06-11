@@ -2,71 +2,37 @@
 
 [中文](./README.md)
 
-`@agent-kit/toolcalls` is a collection of reusable tools for building AI agents.
+`@agent-kit/toolcalls` is a tools foundation package for building AI agents.
 
-When building agents, developers often recreate the same basic tools again and again: memory access, memory updates, search, file operations, HTTP requests, database queries, knowledge retrieval, and more. This package aims to collect those common tools and provide a consistent way to define, register, convert, and execute them.
+It does not bind you to a specific agent framework. Instead, it provides a stable way to define tools, register tools, convert tools into provider-specific formats, and execute the original tool functions.
 
-The package is framework-agnostic. It does not depend on a specific agent runtime, application repository, or model provider. You can use it with your own agent runtime, the OpenAI SDK, Anthropic SDK, Gemini SDK, or any custom model integration.
+Over time, this repository will collect common agent tools such as time tools, HTTP tools, file tools, search tools, code execution tools, and more. The current focus is to stabilize the core tool protocol and runtime design first.
 
-### What It Helps With
-
-- Reuse common tools across agent projects.
-- Define tools with a consistent TypeScript shape.
-- Convert the same tools into provider-specific tool definitions.
-- Execute registered tools by tool name.
-- Avoid rebuilding tool registries and provider adapters in every agent project.
-
-### Core Idea
-
-Every tool starts with the same raw structure:
-
-```ts
-export type Tool<TInput = Record<string, unknown>, TOutput = unknown> = {
-  name: string;
-  description: string;
-  inputSchema: JsonSchemaObject;
-  execute(input: TInput): Promise<TOutput> | TOutput;
-};
-```
-
-Then call:
-
-```ts
-registerTools([tool], provider)
-```
-
-This does two things:
-
-1. Stores the raw tool internally so it can later be executed with `execute_set(tool_name, input)`.
-2. Returns provider-specific tool definitions for OpenAI, Anthropic, Gemini, or another supported provider.
-
-### Installation
+## Installation
 
 ```bash
 npm install @agent-kit/toolcalls
 ```
 
-### Quick Start
+## Quick Start
+
+The example below imports a basic tool and registers it for OpenAI.
 
 ```ts
-import {
-  memoryListTool,
-  execute_set,
-  registerTools,
-} from '@agent-kit/toolcalls';
+import { createGetTimeTool, registerTools } from '@agent-kit/toolcalls';
 
-const tools = registerTools([memoryListTool], 'openai');
+const toolcalls = registerTools([createGetTimeTool()], 'openai');
 
 const completion = await openai.chat.completions.create({
   model: 'gpt-4.1',
   messages,
-  tools,
+  tools: toolcalls.tools,
 });
 
 const toolCall = completion.choices[0]?.message.tool_calls?.[0];
 
 if (toolCall) {
-  const output = await execute_set(
+  const output = await toolcalls.execute_set(
     toolCall.function.name,
     JSON.parse(toolCall.function.arguments),
   );
@@ -75,21 +41,89 @@ if (toolCall) {
 }
 ```
 
-### Runtime Flow
+## What It Helps With
 
-```text
-import tools from @agent-kit/toolcalls
-  -> choose the tools to register
-  -> registerTools([tools], provider)
-  -> store raw Tools internally
-  -> return provider-specific tool definitions
-  -> send tools to the model
-  -> model returns a tool call
-  -> execute_set(tool_name, input)
-  -> run the raw Tool's execute function
+- Define agent tools with a consistent TypeScript shape.
+- Convert the same `Tool` into provider-specific tool definitions.
+- Register a group of tools and get an isolated execution instance.
+- Use the same tool names across different instances without conflicts.
+- Avoid rebuilding tool registries and provider adapters in every agent project.
+
+## Core Concepts
+
+### Tool
+
+`Tool` is the standard structure for a single tool.
+
+```ts
+export type ToolConfig = Record<string, unknown>;
+
+export type Tool<
+  TInput = Record<string, unknown>,
+  TOutput = unknown,
+  TConfig extends ToolConfig = ToolConfig,
+> = {
+  name: string;
+  description: string;
+  inputSchema: JsonSchemaObject;
+  execute(input: TInput, config?: Partial<TConfig>): Promise<TOutput> | TOutput;
+};
 ```
 
-### Supported Providers
+### ToolKit
+
+`ToolKit` is a group of related tools.
+
+```ts
+export type ToolKit = Tool[];
+```
+
+If a capability naturally contains multiple tools, expose it as `createXxxToolKit(config): ToolKit`. If it is a single tool, expose it as `createXxxTool(config): Tool`.
+
+### ToolCallInstance
+
+Every `registerTools` call returns an isolated instance. In most cases, you only need `tools` and `execute_set` from that instance.
+
+```ts
+const toolcalls = registerTools([createGetTimeTool()], 'openai');
+
+// Pass this to the provider SDK
+toolcalls.tools;
+
+// Execute a raw tool registered in this instance
+await toolcalls.execute_set('get_time', {});
+```
+
+This means you can register tools with the same names multiple times, as long as they live in different instances.
+
+## Runtime Flow
+
+```text
+define Tool or ToolKit
+  -> registerTools(tools, provider)
+  -> return an isolated ToolCallInstance
+  -> instance.tools contains provider-specific tool definitions
+  -> send instance.tools to the model
+  -> the model returns a tool call
+  -> instance.execute_set(tool_name, input)
+  -> execute the raw Tool inside this instance
+```
+
+## Instance Isolation
+
+`registerTools` does not use a global store. Every call creates a new isolated instance.
+
+```ts
+const agentA = registerTools([createGetTimeTool()], 'openai');
+const agentB = registerTools([createGetTimeTool()], 'openai');
+
+await agentA.execute_set('get_time', {});
+await agentB.execute_set('get_time', {});
+```
+
+Both instances contain `get_time`, but their stores are isolated. If a tool later receives different paths, API keys, or business config, it will not affect other instances.
+
+## Supported Providers
 
 ```ts
 type ProviderName = 'openai' | 'anthropic' | 'gemini';
@@ -97,38 +131,29 @@ type ProviderName = 'openai' | 'anthropic' | 'gemini';
 
 Different providers expect different tool shapes. This package converts the shared `Tool` definition into provider-specific structures through factories.
 
-### Built-in Tools
+## Built-in Tools
 
-| Tool | Description |
-| --- | --- |
-| `memoryListTool` | Lists memories available to the agent. |
+The current version does not include built-in tools yet.
 
-Future tools may include:
+The first step is to stabilize the tool protocol, registration flow, instance isolation, and provider conversion. Future built-in tools may include:
 
-- `memorySaveTool`
-- `webSearchTool`
-- `httpFetchTool`
-- `fileReadTool`
-- `knowledgeSearchTool`
-- `databaseQueryTool`
+- `createGetTimeTool`
+- `createHttpFetchTool`
+- `createReadFileTool`
+- `createWriteFileTool`
+- `createWebSearchTool`
 
-### Using Custom Tools
+## Custom Tools
 
-If you want to add a new tool to your own agent, you do not need to modify this npm package.
+To add a tool in your own project, you only need two steps:
 
-You only need to do two things in your project:
-
-1. Define a tool that follows the `Tool` type.
-2. Pass that tool to `registerTools([tool], provider)`.
+1. Define a tool that matches the `Tool` type.
+2. Pass it to `registerTools([tool], provider)`.
 
 Example:
 
 ```ts
-import type { Tool } from '@agent-kit/toolcalls';
-import {
-  execute_set,
-  registerTools,
-} from '@agent-kit/toolcalls';
+import { readEnv, registerTools, type Tool } from '@agent-kit/toolcalls';
 
 type SearchInput = {
   query: string;
@@ -138,44 +163,93 @@ type SearchOutput = {
   results: string[];
 };
 
-export const searchTool: Tool<SearchInput, SearchOutput> = {
-  name: 'search',
-  description: 'Search for information by query.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      query: {
-        type: 'string',
-        description: 'Search query.',
-      },
-    },
-    required: ['query'],
-    additionalProperties: false,
-  },
-  async execute(input) {
-    return {
-      results: [`Result for ${input.query}`],
-    };
-  },
+type SearchConfig = {
+  apiKey?: string;
 };
 
-const tools = registerTools([searchTool], 'openai');
+export function createSearchTool(
+  config: Partial<SearchConfig> = {},
+): Tool<SearchInput, SearchOutput, SearchConfig> {
+  return {
+    name: 'search',
+    description: 'Search for information by query.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Search query.',
+        },
+      },
+      required: ['query'],
+      additionalProperties: false,
+    },
+    async execute(input, executeConfig = {}) {
+      const apiKey =
+        executeConfig.apiKey ?? config.apiKey ?? readEnv('SEARCH_API_KEY');
 
-const output = await execute_set('search', {
-  query: 'agent tools',
-});
+      return {
+        results: [`Result for ${input.query} with ${apiKey ?? 'no-api-key'}`],
+      };
+    },
+  };
+}
+
+const search = registerTools(
+  [
+    createSearchTool({
+      apiKey: 'create-time-api-key',
+    }),
+  ],
+  'openai',
+);
+
+const output = await search.execute_set(
+  'search',
+  {
+    query: 'agent tools',
+  },
+  {
+    apiKey: 'runtime-api-key',
+  },
+);
 ```
 
-That is all you need to add a custom tool.
+Recommended config precedence:
 
-`registerTools` stores `searchTool` internally and returns the provider-specific tool definition. Later, when the model calls this tool, use `execute_set('search', input)` to run the raw tool.
+```text
+execute_set config > createXxxTool config > environment variables
+```
 
-You can register multiple custom tools at once:
+## Custom ToolKits
+
+If one capability contains multiple related tools, define it as a `ToolKit`.
 
 ```ts
-const tools = registerTools([
-  searchTool,
-  readFileTool,
-  webSearchTool,
-], 'openai');
+import type { ToolKit } from '@agent-kit/toolcalls';
+
+export function createFileToolKit(config: FileToolKitConfig): ToolKit {
+  return [
+    createReadFileTool(config),
+    createWriteFileTool(config),
+  ];
+}
+
+const fileTools = registerTools(
+  [
+    ...createFileToolKit({
+      rootDir: './workspace',
+    }),
+  ],
+  'openai',
+);
 ```
+
+Recommended naming:
+
+```text
+createXxxTool(config): Tool
+createXxxToolKit(config): ToolKit
+```
+
+Use one file per tool. Use `tool.ts` to assemble a toolkit.
